@@ -1,0 +1,122 @@
+/* =====================================================================
+   STYLES — Archivage électronique (DSIC)
+   Couleurs : bleu institutionnel + trait vert/jaune/rouge du drapeau.
+   Les variables ci-dessous (--blue, --bl...) permettent de changer
+   les couleurs du site en un seul endroit.
+   ===================================================================== */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--blue:#153e68;--bl:#1d659e;--bg:#f3f6fa;--text:#24384e;--muted:#8492a2;--border:#e1e8ef;--red:#bd4545;--green:#1b8a4b;--gold:#e6b422}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+.hidden{display:none!important}
+.muted{color:var(--muted);font-size:12px}
+.banner{width:100%;aspect-ratio:16/5;object-fit:cover;object-position:center 52%;display:block}
+
+/* ===== PAGE DE CONNEXION : carte blanche centrée sur fond bleu ===== */
+.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#102f50,#17669f)}
+.login-card{background:#fff;width:100%;max-width:440px;padding:30px 35px 24px;border-radius:14px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.2)}
+.login-card h1{font-size:19px;color:var(--blue);margin:14px 0 8px}
+.subtitle{color:var(--muted);font-size:12px;margin-bottom:24px}
+.login-card label{display:block;text-align:left;font-size:12px;font-weight:bold;margin-bottom:8px}
+input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:7px;font-size:13px;outline:none;background:#fff;color:var(--text)}
+input:focus,select:focus{border-color:var(--bl)}
+.login-card input{margin-bottom:18px}
+.login-btn{width:100%;padding:14px;border:0;border-radius:7px;background:var(--blue);color:#fff;font-weight:bold;cursor:pointer}
+.login-btn:hover{background:var(--bl)}
+.error{color:var(--red);font-size:12px;margin-top:14px;min-height:14px}
+.login-footer{border-top:1px solid var(--border);margin-top:20px;padding-top:16px;font-size:11px;color:var(--muted)}
+
+/* ===== STRUCTURE SUPER UTILISATEUR : menu bleu à gauche + contenu à droite ===== */
+#app{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--blue);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0}
+.logo-box{background:#fff;margin:14px;border-radius:10px;padding:4px}
+#nav{flex:1;padding:8px 10px}
+#nav button{display:flex;gap:10px;width:100%;padding:12px 14px;margin-bottom:4px;border:0;border-radius:8px;background:none;color:#cfe0f1;font-size:13px;cursor:pointer;text-align:left}
+#nav button:hover,#nav button.on{background:rgba(255,255,255,.14);color:#fff}
+.side-foot{padding:16px;border-top:1px solid rgba(255,255,255,.15);font-size:12px}
+.side-foot small{display:block;color:#9fbad6;margin:3px 0 12px}
+.logout-btn{background:#f9eeee;color:var(--red);border:0;padding:10px 14px;border-radius:7px;cursor:pointer;font-weight:bold;width:100%}
+.content{flex:1;min-width:0}
+.tri{height:4px;background:linear-gradient(90deg,#009a44 33%,#f1c40f 33% 66%,#d62828 66%)}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:14px 4%;display:flex;justify-content:space-between;align-items:center}
+.burger{display:none;border:0;background:none;font-size:22px;cursor:pointer}
+.section-label{color:var(--bl);font-size:11px;font-weight:bold;letter-spacing:2px}
+.container{max-width:1150px;margin:28px auto;padding:0 22px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:22px}
+.head h1{font-size:25px;color:var(--blue)}
+.head p{color:var(--muted);margin-top:6px}
+
+/* ===== CARTES BLANCHES ET CHIFFRES CLÉS DU TABLEAU DE BORD ===== */
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;box-shadow:0 5px 20px rgba(20,50,80,.04);margin-bottom:20px}
+.card h3{font-size:15px;color:var(--blue);margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:20px}
+.kpi{background:#fff;border:1px solid var(--border);border-left:5px solid var(--bl);border-radius:12px;padding:18px}
+.kpi span{color:var(--muted);font-size:11px}
+.kpi strong{display:block;font-size:28px;color:var(--blue);margin-top:8px}
+.kpi.g{border-left-color:var(--green)}.kpi.y{border-left-color:var(--gold)}.kpi.r{border-left-color:var(--red)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+
+/* ===== GRAPHIQUES (barres dessinées en CSS, sans bibliothèque) ===== */
+.hbar{display:flex;align-items:center;gap:10px;margin-bottom:11px;font-size:12px}
+.hbar>span{width:80px}
+.hbar>div{flex:1;background:#eef3f8;border-radius:20px;height:14px;overflow:hidden}
+.hbar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--bl));border-radius:20px}
+.hbar b{width:28px;text-align:right}
+.cols{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:10px}
+.cols div{flex:1;text-align:center;font-size:10px;color:var(--muted);display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.cols i{display:block;background:var(--bl);border-radius:4px 4px 0 0;min-height:2px}
+.cols b{color:var(--blue);font-size:11px}
+
+/* ===== BOUTONS : principal (bleu), secondaire (gris), danger (rouge) ===== */
+.btn-primary,.btn-secondary,.btn-danger{padding:11px 20px;border-radius:7px;border:0;font-size:12px;font-weight:bold;cursor:pointer}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--bl)}
+.btn-secondary{background:#e9eef4;color:#46596d}.btn-secondary:hover{background:#dce5ee}
+.btn-danger{background:#f9eeee;color:var(--red)}
+.btn-sm{padding:6px 10px;font-size:11px;margin-right:4px}
+.buttons{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+
+/* ===== TABLEAUX ET ÉTIQUETTES DE STATUT ===== */
+.tools{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.table-container{overflow-x:auto}
+table{width:100%;min-width:640px;border-collapse:collapse}
+thead{background:var(--blue);color:#fff}
+th{padding:13px 12px;font-size:11px;text-align:left}
+td{padding:13px 12px;font-size:12px;border-bottom:1px solid var(--border)}
+tbody tr:hover{background:#f6f9fc}
+.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:bold;background:#eaf2fa;color:var(--blue)}
+.badge.ok{background:#e4f5ea;color:var(--green)}.badge.off{background:#f9eeee;color:var(--red)}.badge.sup{background:#fff4d6;color:#8a6a00}
+.empty{text-align:center;padding:36px;color:var(--muted)}
+
+/* ===== FENÊTRE DE SAISIE ET MESSAGE DE CONFIRMATION ===== */
+dialog{border:0;border-radius:12px;padding:26px;width:min(440px,92vw);margin:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(10,30,50,.55)}
+dialog h3{color:var(--blue);margin-bottom:16px}
+dialog label{display:block;font-weight:bold;font-size:12px;margin:12px 0 6px}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--blue);color:#fff;padding:13px 20px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:99}
+
+@media(max-width:850px){
+ .sidebar{position:fixed;left:-250px;z-index:50;transition:left .25s}
+ .sidebar.open{left:0}
+ .burger{display:block}
+ .grid2,.tools{grid-template-columns:1fr}
+ .container{padding:0 14px}
+}
+
+/* ===== INTERFACE CONSULTANT =====
+   Page simple : en-tête, carte de recherche, résultats, pied de page. */
+.hbanner{height:54px;aspect-ratio:16/5;object-fit:cover;object-position:center 52%}
+.header-user{display:flex;align-items:center;gap:14px;font-weight:bold;font-size:12px}
+.logout-btn.small{width:auto}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-weight:bold;font-size:12px;margin-bottom:8px;color:#43566a}
+select:disabled{background:#f2f4f6;cursor:not-allowed;color:#9aa8b6}
+.buttons.left{justify-content:flex-start}
+.info{margin-top:16px;color:#758599;font-size:12px;display:flex;gap:9px;align-items:center}
+.info span{width:19px;height:19px;border-radius:50%;background:#dceaf7;color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:bold;flex-shrink:0}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;background:#f4f7fa;padding:18px;border-radius:8px;margin-bottom:20px}
+.summary span{display:block;color:var(--muted);font-size:11px;margin-bottom:8px}
+.summary strong{color:var(--blue);font-size:14px}
+.cfooter{text-align:center;color:var(--muted);font-size:11px;padding:22px 16px;border-top:1px solid var(--border);margin-top:30px}
+@media(max-width:650px){.summary{grid-template-columns:1fr}.hbanner{height:40px}}
+
+/* À l'impression : on cache boutons et en-têtes, seule la liste reste */
+@media print{.noprint{display:none!important}body{background:#fff}.card{border:0;box-shadow:none}}

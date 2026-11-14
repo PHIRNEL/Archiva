@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archivage électronique — DSIC</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- =====================================================
+     PAGE 1 — CONNEXION
+     Première page vue par tout le monde (super utilisateur
+     comme consultant). Le script décide ensuite quelle
+     interface afficher selon le rôle du compte.
+     ===================================================== -->
+<section id="loginPage" class="login-page">
+  <div class="login-card">
+    <img src="logo_m.png" alt="Ministère de la Sécurité sociale" class="banner">
+    <h1>ARCHIVAGE ÉLECTRONIQUE</h1>
+    <p class="subtitle">Plateforme de gestion des archives administratives</p>
+    <form id="loginForm">
+      <label for="username">Identifiant</label>
+      <input id="username" placeholder="Entrez votre identifiant" required autocomplete="username">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" placeholder="Entrez votre mot de passe" required autocomplete="current-password">
+      <button class="login-btn">Se connecter</button>
+      <p id="loginError" class="error"></p>
+    </form>
+    <div class="login-footer">DSIC · Système de gestion documentaire</div>
+  </div>
+</section>
+
+<!-- =====================================================
+     INTERFACE CONSULTANT
+     Volontairement simple : pas de tableau de bord, pas de
+     menu. Une page de recherche, puis une page de résultats.
+     ===================================================== -->
+<div id="consultPage" class="hidden">
+  <div class="tri"></div>
+
+  <!-- En-tête institutionnel : logo, nom de l'utilisateur, déconnexion -->
+  <header class="topbar noprint">
+    <img src="logo_m.png" alt="Ministère" class="hbanner">
+    <div class="header-user">
+      <span id="cUser"></span>
+      <button class="logout-btn small" onclick="logout()">Déconnexion</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ---------- Écran 1 : la recherche ---------- -->
+    <section id="cSearch">
+      <div class="head"><div>
+        <span class="section-label">ESPACE DOCUMENTAIRE</span>
+        <h1>Recherche de documents</h1>
+        <p>Choisissez un seul critère : le type de document ou le mois.</p>
+      </div></div>
+
+      <div class="card">
+        <form id="cForm">
+          <div class="form-group">
+            <label for="cType">Type de document</label>
+            <select id="cType"></select>
+          </div>
+          <div class="form-group">
+            <label for="cMonth">Mois</label>
+            <select id="cMonth"></select>
+          </div>
+          <div class="buttons left">
+            <button type="submit" class="btn-primary">Valider</button>
+            <button type="reset" class="btn-secondary">Annuler</button>
+          </div>
+        </form>
+      </div>
+      <p class="info"><span>i</span> La recherche s'effectue à partir d'un seul critère : dès que vous en choisissez un, l'autre est désactivé.</p>
+    </section>
+
+    <!-- ---------- Écran 2 : les résultats ---------- -->
+    <section id="cResult" class="hidden">
+      <div class="head"><div>
+        <span class="section-label">CONSULTATION</span>
+        <h1>Résultats de recherche</h1>
+        <p>Documents correspondant à votre recherche.</p>
+      </div></div>
+
+      <div class="card">
+        <!-- Rappel de ce qui a été recherché -->
+        <div class="summary">
+          <div><span>Critère</span><strong id="rCrit"></strong></div>
+          <div><span>Valeur recherchée</span><strong id="rVal"></strong></div>
+          <div><span>Nombre de résultats</span><strong id="rCount"></strong></div>
+        </div>
+
+        <!-- Outils sur les résultats -->
+        <div class="buttons left noprint" style="margin:0 0 16px">
+          <button class="btn-secondary" onclick="window.print()">Imprimer la liste</button>
+          <button class="btn-secondary" onclick="exportCsv(lastResults)">Exporter en CSV</button>
+        </div>
+
+        <div id="rTable"></div>
+
+        <!-- Retour = revenir à la recherche ; Annuler = quitter la session -->
+        <div class="buttons noprint">
+          <button class="btn-secondary" onclick="logout()">Annuler</button>
+          <button class="btn-primary" onclick="backToSearch()">← Retour</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="cfooter noprint">
+    République du Congo · Ministère de la Sécurité sociale, de la Prévoyance sociale et de la Solidarité nationale · DSIC
+  </footer>
+</div>
+
+<!-- =====================================================
+     INTERFACE SUPER UTILISATEUR
+     Menu à gauche + zone de contenu remplie par le script
+     (tableau de bord, documents, utilisateurs, journal).
+     ===================================================== -->
+<div id="app" class="hidden">
+  <aside class="sidebar" id="sidebar">
+    <div class="logo-box"><img src="logo_m.png" alt="Logo" class="banner"></div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <div id="meName"></div>
+      <small id="meRole"></small>
+      <button class="logout-btn" onclick="logout()">Déconnexion</button>
+    </div>
+  </aside>
+  <div class="content">
+    <div class="tri"></div>
+    <header class="topbar">
+      <button class="burger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+      <div><span class="section-label" id="crumb"></span></div>
+      <span id="clock" class="muted"></span>
+    </header>
+    <main class="container" id="main"></main>
+  </div>
+</div>
+
+<!-- Fenêtre de saisie (ajout/modification) et petit message de confirmation -->
+<dialog id="dlg"><form id="dform"></form></dialog>
+<div id="toast" class="toast hidden"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
