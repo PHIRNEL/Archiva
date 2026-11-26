@@ -1,17 +1,6 @@
 /* =====================================================================
    ARCHIVAGE ÉLECTRONIQUE — DSIC
-   Ministère de la Sécurité sociale
-
-   Comment lire ce fichier (dans l'ordre) :
-     1. Petits outils utilitaires
-     2. Listes de référence (types de documents, mois, rôles)
-     3. Les données (comptes, documents, journal)
-     4. Les droits de chaque rôle
-     5. Connexion, déconnexion et fermeture automatique de session
-     6. Interface CONSULTANT (recherche -> résultats)
-     7. Interface SUPER UTILISATEUR (tableau de bord, documents,
-        utilisateurs, journal)
-     8. Reprise de session au rechargement de la page
+   Ministère de la Sécurité sociale, prevoyance sociale et de la solidarité nationale
    ===================================================================== */
 
 
@@ -42,7 +31,7 @@ const fdt = iso => iso ? new Date(iso).toLocaleString("fr-FR") : "—";
    2. LISTES DE RÉFÉRENCE
    Si un jour il faut ajouter un type de document, c'est ici.
    --------------------------------------------------------------------- */
-const TYPES = ["Note", "Lettre", "Lettre PR", "Lettre PM"];
+const TYPES = ["Note", "Lettre", "Lettre PR", "Lettre PM", "Autre"];
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Deux rôles seulement : celui qui fait tout, et celui qui consulte.
@@ -243,34 +232,46 @@ $("#cMonth").addEventListener("change", lockOther);
 // (setTimeout laisse le navigateur vider les champs avant de réactiver les listes)
 $("#cForm").addEventListener("reset", () => setTimeout(lockOther, 0));
 
-// Bouton VALIDER : lance la recherche et affiche les résultats
-$("#cForm").addEventListener("submit", e => {
+// Bouton VALIDER : recherche réelle dans le dossier Dropbox ARCHIVA.
+$("#cForm").addEventListener("submit", async e => {
   e.preventDefault();
   const type = $("#cType").value, month = $("#cMonth").value;
-
-  // Il faut au moins un critère
   if (!type && !month) {
     alert("Veuillez choisir un type de document ou un mois.");
     return;
   }
 
-  // On garde les documents qui correspondent, les plus récents en premier
-  lastResults = docs
-    .filter(d => type ? d.type === type : d.date.slice(5, 7) === month)
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const submitButton = $("#cForm").querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = "Recherche dans Dropbox…";
+  try {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (month) params.set("month", month);
+    const response = await fetch(`/api/dropbox-search?${params.toString()}`, { headers: { "Accept": "application/json" } });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "La recherche Dropbox a échoué.");
 
-  // Rappel de la recherche + nombre de résultats
-  $("#rCrit").textContent = type ? "Type de document" : "Mois";
-  $("#rVal").textContent = type || MONTHS[+month - 1];
-  $("#rCount").textContent = lastResults.length;
-  $("#rTable").innerHTML = docTable(lastResults, false);   // false = pas de boutons de gestion
+    lastResults = (payload.files || []).map(file => ({
+      ref: file.name, type: file.type || "Autre", date: file.date,
+      name: file.name, size: file.size, path: file.path,
+      file: { source: "dropbox", name: file.name, path: file.path }
+    })).sort((a, b) => b.date.localeCompare(a.date));
 
-  log("Recherche : " + (type ? "type " + type : "mois " + MONTHS[+month - 1]) + " (" + lastResults.length + " résultat(s))");
-
-  // On passe à l'écran des résultats
-  $("#cSearch").classList.add("hidden");
-  $("#cResult").classList.remove("hidden");
-  window.scrollTo(0, 0);
+    $("#rCrit").textContent = type ? "Type de document" : "Mois";
+    $("#rVal").textContent = type || MONTHS[+month - 1];
+    $("#rCount").textContent = `${lastResults.length} document(s) réel(s)`;
+    $("#rTable").innerHTML = docTable(lastResults, false);
+    log("Recherche Dropbox : " + (type ? "type " + type : "mois " + MONTHS[+month - 1]) + " (" + lastResults.length + " résultat(s))");
+    $("#cSearch").classList.add("hidden");
+    $("#cResult").classList.remove("hidden");
+    window.scrollTo(0, 0);
+  } catch (error) {
+    alert(error.message || "Impossible de contacter Dropbox.");
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Valider";
+  }
 });
 
 // Bouton RETOUR (page des résultats) : revient à la recherche
@@ -359,10 +360,12 @@ function viewDash() {
 // Dans tous les cas : boutons « Lire » et « Télécharger » si un fichier existe.
 function docTable(list, actions) {
   if (!list.length) return `<div class="empty">Aucun document trouvé.</div>`;
-  return `<div class="table-container"><table><thead><tr><th>N°</th><th>Référence</th><th>Type</th><th>Date</th><th>Document</th><th>Fichier</th>${actions ? "<th>Actions</th>" : ""}</tr></thead><tbody>` +
-    list.map((d, i) => `<tr><td>${i + 1}</td><td>${esc(d.ref)}</td><td><span class="badge">${esc(d.type)}</span></td><td>${fdate(d.date + "T00:00:00")}</td><td>${esc(d.name)}</td>
+  return `<div class="table-container"><table><thead><tr><th>N°</th><th>Référence</th><th>Type</th><th>Date</th><th>Document</th><th>Taille</th><th>Fichier</th>${actions ? "<th>Actions</th>" : ""}</tr></thead><tbody>` +
+    list.map((d, i) => `<tr><td>${i + 1}</td><td>${esc(d.ref)}</td><td><span class="badge">${esc(d.type)}</span></td><td>${fdate(d.date + "T00:00:00")}</td><td>${esc(d.name)}</td><td>${d.size ? (d.size / 1024).toFixed(1) + " Ko" : "—"}</td>
       <td>${d.file
-        ? `<button class="btn-secondary btn-sm" onclick="openDoc('${esc(d.ref)}')">Lire</button><button class="btn-primary btn-sm" onclick="dlDoc('${esc(d.ref)}')">Télécharger</button>`
+        ? (d.file.source === "dropbox"
+          ? `<button class="btn-secondary btn-sm" onclick="openDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Lire</button><button class="btn-primary btn-sm" onclick="downloadDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Télécharger</button>`
+          : `<button class="btn-secondary btn-sm" onclick="openDoc('${esc(d.ref)}')">Lire</button><button class="btn-primary btn-sm" onclick="dlDoc('${esc(d.ref)}')">Télécharger</button>`)
         : `<span class="muted">Aucun fichier</span>`}</td>` +
       (actions ? `<td><button class="btn-secondary btn-sm" onclick="docForm('${esc(d.ref)}')">Modifier</button><button class="btn-danger btn-sm" onclick="docDel('${esc(d.ref)}')">Supprimer</button></td>` : "") +
       `</tr>`).join("") + `</tbody></table></div>`;
@@ -385,6 +388,25 @@ async function dlDoc(ref) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(f.blob); a.download = f.d.file.name; a.click();
   log("Téléchargement : " + ref);
+}
+
+// Les liens Dropbox sont créés côté serveur et restent temporaires.
+async function dropboxTemporaryLink(encodedPath) {
+  const path = decodeURIComponent(encodedPath);
+  const response = await fetch(`/api/dropbox-search?action=link&path=${encodeURIComponent(path)}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Impossible d'obtenir le lien Dropbox.");
+  return payload.url;
+}
+async function openDropboxDoc(encodedPath) {
+  try { const url = await dropboxTemporaryLink(encodedPath); window.open(url, "_blank", "noopener"); }
+  catch (error) { alert(error.message); }
+}
+async function downloadDropboxDoc(encodedPath) {
+  try {
+    const url = await dropboxTemporaryLink(encodedPath);
+    const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click();
+  } catch (error) { alert(error.message); }
 }
 
 // Applique les filtres de la page Documents (texte, type, année, mois)
