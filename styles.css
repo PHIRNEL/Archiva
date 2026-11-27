@@ -120,3 +120,11 @@ select:disabled{background:#f2f4f6;cursor:not-allowed;color:#9aa8b6}
 
 /* À l'impression : on cache boutons et en-têtes, seule la liste reste */
 @media print{.noprint{display:none!important}body{background:#fff}.card{border:0;box-shadow:none}}
+
+/* ===== TABLEAU DE BORD CONNECTÉ À DROPBOX ===== */
+.dash-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#edf7f0;border:1px solid #d4eadb;color:#245d39;border-radius:9px;padding:12px 15px;margin-bottom:18px;font-size:12px}
+.status-dot{width:9px;height:9px;border-radius:50%;background:#1b8a4b;display:inline-block}
+.dash-tips{padding-left:19px;margin:0 0 14px;line-height:1.9;color:var(--text)}
+.loading-line{height:8px;border-radius:8px;background:linear-gradient(90deg,#e7edf3,#cbd9e7,#e7edf3);background-size:200% 100%;animation:dashload 1.3s infinite;margin-bottom:15px}
+@keyframes dashload{to{background-position:-200% 0}}
+@media(max-width:650px){.dash-source{align-items:flex-start;flex-direction:column}.kpis{grid-template-columns:1fr 1fr}.kpi strong{font-size:22px}}
