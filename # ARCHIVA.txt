@@ -1,0 +1,164 @@
+# ARCHIVA
+## Présentation du projet et travaux restants
+
+### 1. Présentation générale
+
+ARCHIVA est une plateforme de gestion et de consultation des archives numériques destinée à la Direction générale de la sécurité sociale (DGSS).
+
+Le projet vise à faciliter la recherche, la consultation, le suivi et la traçabilité des documents administratifs.
+
+La plateforme utilise Dropbox comme espace de stockage des documents. Elle est accessible depuis un navigateur web et son hébergement actuel repose sur Vercel.
+
+### 2. Objectifs du projet
+
+ARCHIVA a pour objectifs de :
+
+- Centraliser les documents administratifs dans un espace numérique.
+- Faciliter la recherche des documents.
+- Réduire le temps consacré aux recherches dans les archives physiques.
+- Organiser les documents par catégories, dates et types.
+- Contrôler les accès selon les profils des utilisateurs.
+- Conserver un historique des opérations effectuées.
+- Produire des statistiques sur les archives disponibles.
+- Améliorer la conservation et la consultation des documents.
+
+### 3. État actuel du projet
+
+Les fonctionnalités suivantes sont déjà intégrées :
+
+**A. Interface et accès**
+- Interface de connexion.
+- Comptes administrateur et consultant.
+- Gestion des utilisateurs depuis l'interface.
+- Tableau de bord.
+
+**B. Connexion à Dropbox**
+- Connexion à un espace Dropbox.
+- Consultation des fichiers présents dans le dossier ARCHIVA.
+- Récupération des informations des documents.
+- Affichage des fichiers réellement présents dans Dropbox.
+
+**C. Recherche et consultation**
+- Recherche par nom ou chemin du document.
+- Filtrage par type, année et mois.
+- Consultation et téléchargement des documents.
+
+**D. Statistiques**
+- Nombre de documents disponibles.
+- Volume total des fichiers.
+- Répartition par type et par année.
+- Identification des fichiers sans extension.
+- Détection de groupes de fichiers portant le même nom.
+
+**E. Traçabilité**
+- Enregistrement des connexions et déconnexions.
+- Enregistrement des recherches.
+- Historique des consultations et téléchargements.
+- Historique des opérations sur les comptes.
+- Stockage des journaux dans un dossier dédié sur Dropbox.
+- Consultation et exportation de l'historique.
+
+### 4. Travaux restant à effectuer
+
+Le projet constitue une première version fonctionnelle. Plusieurs améliorations restent nécessaires avant une utilisation institutionnelle.
+
+#### PRIORITÉ 1 : Sécurisation des accès
+
+- Mettre en place une authentification centralisée côté serveur.
+- Stocker les comptes dans une véritable base de données.
+- Sécuriser les mots de passe avec un système de hachage.
+- Mettre en place une gestion stricte des rôles et permissions.
+- Empêcher la modification des identités et des rôles depuis le navigateur.
+- Protéger les sessions et les accès aux API.
+
+#### PRIORITÉ 2 : Gestion complète des archives
+
+- Ajouter l'importation de documents directement dans ARCHIVA.
+- Ajouter le classement automatique dans Dropbox.
+- Permettre le renommage des documents.
+- Permettre le déplacement des documents entre dossiers.
+- Mettre en place une suppression contrôlée avec confirmation et autorisation.
+- Ajouter la modification des informations descriptives des documents.
+
+Actuellement, le catalogue permet principalement de consulter et de télécharger les fichiers. Les opérations d'ajout, de modification et de suppression restent à développer.
+
+#### PRIORITÉ 3 : Classification intelligente
+
+- Identifier automatiquement le type de document.
+- Distinguer les notes, lettres, lettres PR et lettres PM.
+- Extraire les informations utiles des fichiers PDF.
+- Reconnaître les dates et références administratives présentes dans les documents.
+- Ajouter une recherche par contenu, et pas uniquement par nom de fichier.
+- Détecter les doublons à partir du contenu des documents.
+
+La classification actuelle repose principalement sur les noms et les chemins des fichiers.
+
+#### PRIORITÉ 4 : Traçabilité renforcée
+
+- Associer chaque opération à un utilisateur authentifié côté serveur.
+- Enregistrer les adresses IP et les informations utiles sur les sessions.
+- Renforcer la protection contre la modification des journaux.
+- Prévoir une sauvegarde indépendante des journaux.
+- Mettre en place des rapports périodiques d'activité.
+
+Les journaux actuels sont conservés dans Dropbox. Leur identité utilisateur dépend encore des informations transmises par le navigateur. Ils ne constituent donc pas encore une preuve infalsifiable des opérations.
+
+#### PRIORITÉ 5 : Organisation et administration
+
+- Définir une nomenclature officielle de classement.
+- Définir les catégories et sous-catégories des archives.
+- Créer un référentiel des services producteurs de documents.
+- Mettre en place une politique de conservation des documents.
+- Définir les droits d'accès par service et par catégorie.
+- Prévoir une procédure de sauvegarde et de restauration.
+
+#### PRIORITÉ 6 : Amélioration et déploiement
+
+- Tester la plateforme avec plusieurs utilisateurs.
+- Vérifier le fonctionnement sur ordinateur, tablette et téléphone.
+- Améliorer les performances de recherche.
+- Prévoir un nom de domaine institutionnel.
+- Étudier une solution d'hébergement adaptée aux besoins de la DGSS.
+- Mettre en place une documentation technique et un guide utilisateur.
+- Organiser une formation des agents concernés.
+
+### 5. Architecture technique actuelle
+
+- Interface : HTML, CSS et JavaScript.
+- API : fonctions serveur Vercel.
+- Hébergement : Vercel.
+- Stockage des documents : Dropbox.
+- Journalisation : fichiers JSON stockés dans Dropbox.
+- Accès : navigateur web.
+
+### 6. Points de vigilance
+
+La version actuelle est un prototype avancé. Elle ne doit pas encore être considérée comme une solution d'archivage institutionnelle entièrement sécurisée.
+
+Les comptes restent stockés dans le navigateur. Les opérations de gestion des documents ne sont pas encore intégrées. La classification automatique et la recherche dans le contenu des fichiers restent à développer.
+
+Il faudra également vérifier les règles de conservation, de confidentialité et d'accès aux documents avant la mise en production.
+
+### 7. Plan d'action recommandé
+
+| Étape | Travail à réaliser | Priorité |
+|---|---|---|
+| 1 | Sécuriser l'authentification et les comptes | Critique |
+| 2 | Mettre en place une base de données centrale | Critique |
+| 3 | Développer l'importation et la gestion des documents | Haute |
+| 4 | Renforcer la traçabilité | Haute |
+| 5 | Automatiser le classement des archives | Haute |
+| 6 | Ajouter la recherche dans le contenu des fichiers | Moyenne |
+| 7 | Développer les rapports et tableaux de bord | Moyenne |
+| 8 | Réaliser les tests et préparer le déploiement institutionnel | Haute |
+
+### 8. Résultat attendu
+
+À terme, ARCHIVA doit devenir une plateforme institutionnelle permettant à la DGSS de centraliser, classer, rechercher, consulter, suivre et conserver ses documents administratifs dans un environnement sécurisé.
+
+Le système devra garantir une gestion contrôlée des accès, une traçabilité fiable des opérations, une meilleure organisation des archives et une disponibilité des documents pour les agents autorisés.
+
+**Projet : ARCHIVA**  
+**Structure concernée : Direction générale de la sécurité sociale (DGSS)**  
+**Conception et développement : Service informatique**  
+**Statut : Prototype fonctionnel en cours d'amélioration**
