@@ -55,23 +55,14 @@ const DEFAULT_USERS = [
 
 ];
 
-// Quelques documents d'exemple : référence, type, date, intitulé
-const DEFAULT_DOCS = [
-  ["MSSPSSN/SG/2026/001", "Note", "2026-01-15", "Note de service"],
-  ["MSSPSSN/SG/2026/002", "Lettre", "2026-01-20", "Correspondance administrative"],
-  ["MSSPSSN/SG/2026/003", "Lettre PR", "2026-02-10", "Lettre Présidence"],
-  ["MSSPSSN/SG/2026/004", "Lettre PM", "2026-02-18", "Lettre Primature"],
-  ["MSSPSSN/SG/2026/005", "Note", "2026-03-12", "Note administrative"],
-  ["MSSPSSN/SG/2025/006", "Lettre", "2025-09-05", "Lettre de transmission"],
-  ["MSSPSSN/SG/2025/007", "Lettre PR", "2025-09-18", "Correspondance présidentielle"],
-  ["MSSPSSN/SG/2024/008", "Lettre PM", "2024-06-10", "Correspondance Primature"],
-  ["MSSPSSN/SG/2024/009", "Note", "2024-06-22", "Note administrative"]
-].map(d => ({ ref: d[0], type: d[1], date: d[2], name: d[3], by: "phirnel", file: null }));
-
-// On charge ce qui est déjà enregistré, sinon on prend les valeurs par défaut
+// Les documents ne sont jamais simulés dans ARCHIVA.
+// Le catalogue affiché est chargé directement depuis Dropbox.
+// Les comptes existants sont conservés dans le navigateur dans cette version.
 let users = get("ae2_users", DEFAULT_USERS);
-let docs = get("ae2_docs", DEFAULT_DOCS);
 let logs = get("ae2_logs", []);
+// Ancien catalogue local : il pouvait contenir des exemples ou des entrées non synchronisées.
+// On le retire pour empêcher l'affichage de documents qui n'existent pas dans Dropbox.
+try { localStorage.removeItem("ae2_docs"); } catch (e) {}
 
 let me = null;          // la personne actuellement connectée
 let view = "dash";      // la page affichée côté super utilisateur
@@ -79,18 +70,27 @@ let flt = { q: "", type: "", year: "", month: "" };  // filtres de la liste des 
 let lastResults = [];   // derniers résultats de recherche (pour imprimer / exporter)
 let idleTimer = null;   // chronomètre d'inactivité
 
-// Enregistre tout dans le navigateur. Si la mémoire est pleine, on prévient.
+// Les comptes restent dans le navigateur dans cette version.
+// Les documents et le journal officiel ne sont jamais enregistrés comme données locales.
 const persist = () => {
-  try { save("ae2_users", users); save("ae2_docs", docs); save("ae2_logs", logs); }
-  catch (e) { alert("Stockage du navigateur plein : supprimez des fichiers joints."); }
+  try { save("ae2_users", users); }
+  catch (e) { alert("Stockage du navigateur indisponible."); }
 };
 persist();
 
-// Le journal : on note qui a fait quoi et quand (les 300 dernières lignes)
-function log(action, user) {
-  logs.unshift({ d: new Date().toISOString(), u: user || (me && me.username) || "—", a: action });
-  logs = logs.slice(0, 300);
-  save("ae2_logs", logs);
+// Envoi du journal vers Dropbox. Le serveur crée un fichier JSON distinct par événement.
+// Le cache local sert uniquement à afficher une activité récente si nécessaire.
+const auditSession = sessionStorage.getItem("archiva_audit_session") || (() => {
+  const id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+  sessionStorage.setItem("archiva_audit_session", id); return id;
+})();
+function log(action, user, target = "", details = "") {
+  const event = { d: new Date().toISOString(), u: user || (me && me.username) || "—", role: me?.role || "inconnu", a: action, target, details, sessionId: auditSession };
+  logs.unshift(event); logs = logs.slice(0, 100);
+  try { save("ae2_logs", logs); } catch (e) {}
+  fetch("/api/dropbox-search?action=log", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(event), keepalive: true })
+    .then(async response => { if (!response.ok) { const p = await response.json().catch(() => ({})); console.error("Journal Dropbox non enregistré:", p.error || response.status); } })
+    .catch(error => console.error("Journal Dropbox indisponible:", error));
 }
 
 // Petit message qui apparaît quelques secondes en bas à droite
@@ -261,7 +261,7 @@ $("#cForm").addEventListener("submit", async e => {
     $("#rCrit").textContent = type ? "Type de document" : "Mois";
     $("#rVal").textContent = type || MONTHS[+month - 1];
     $("#rCount").textContent = `${lastResults.length} document(s) réel(s)`;
-    $("#rTable").innerHTML = docTable(lastResults, false);
+    $("#rTable").innerHTML = docTable(lastResults);
     log("Recherche Dropbox : " + (type ? "type " + type : "mois " + MONTHS[+month - 1]) + " (" + lastResults.length + " résultat(s))");
     $("#cSearch").classList.add("hidden");
     $("#cResult").classList.remove("hidden");
@@ -316,78 +316,82 @@ function hbars(rows) {
   return rows.map(r => `<div class="hbar"><span>${esc(r[0])}</span><div><i style="width:${r[1] / max * 100}%"></i></div><b>${r[1]}</b></div>`).join("");
 }
 
-function viewDash() {
-  const y = new Date().getFullYear();
-
-  // Combien de documents par mois cette année
-  const byM = MONTHS.map((m, i) => docs.filter(d => d.date.startsWith(y) && +d.date.slice(5, 7) === i + 1).length);
-  const maxM = Math.max(1, ...byM);
-
-  // Combien de documents par année
-  const years = {};
-  docs.forEach(d => { const k = d.date.slice(0, 4); years[k] = (years[k] || 0) + 1; });
-
-  // Les 5 documents les plus récents
-  const recent = [...docs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-
-  // Les cartes de chiffres clés
+let dashboardRequest = 0;
+function formatBytes(bytes) {
+  if (!bytes) return "0 octet";
+  const units = ["octets", "Ko", "Mo", "Go", "To"];
+  let value = bytes, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ${units[unit]}`;
+}
+function dashBars(rows) {
+  if (!rows.length || rows.every(r => !Number(r[1]))) return `<div class="empty">Aucune donnée Dropbox pour cette période.</div>`;
+  return hbars(rows);
+}
+function renderDropboxDashboard(data) {
+  const year = data.currentYear;
+  const byType = Object.entries(data.byType || {}).sort((a,b) => b[1]-a[1]);
+  const byYear = Object.entries(data.byYear || {}).sort((a,b) => b[0].localeCompare(a[0]));
+  const monthRows = MONTHS.map((m, i) => [m.slice(0,3), (data.byMonth || [])[i] || 0]);
+  const recent = (data.recent || []).map(file => ({
+    ref: file.name, type: file.type || "Autre", date: file.date || "",
+    name: file.name, size: file.size || 0, path: file.path,
+    file: { source: "dropbox", name: file.name, path: file.path }
+  }));
+  const extRows = Object.entries(data.byExtension || {}).sort((a,b) => b[1]-a[1]).slice(0,8);
   const kpis = `
-    <div class="kpi"><span>Documents archivés</span><strong>${docs.length}</strong></div>
-    <div class="kpi g"><span>Documents en ${y}</span><strong>${docs.filter(d => d.date.startsWith(y)).length}</strong></div>
-    <div class="kpi y"><span>Types de documents</span><strong>${TYPES.length}</strong></div>
-    <div class="kpi r"><span>Comptes actifs</span><strong>${users.filter(u => u.active).length}/${users.length}</strong></div>`;
-
+    <div class="kpi"><span>Fichiers dans Dropbox</span><strong>${Number(data.totalFiles || 0).toLocaleString("fr-FR")}</strong></div>
+    <div class="kpi g"><span>Espace occupé</span><strong>${formatBytes(data.totalSize || 0)}</strong></div>
+    <div class="kpi y"><span>Modifiés en ${esc(year)}</span><strong>${Number(data.modifiedThisYear || 0).toLocaleString("fr-FR")}</strong></div>
+    <div class="kpi r"><span>Fichiers sans extension</span><strong>${Number(data.noExtension || 0).toLocaleString("fr-FR")}</strong></div>`;
+  const lastSync = data.generatedAt ? new Date(data.generatedAt).toLocaleString("fr-FR") : "—";
   $("#main").innerHTML = `
-    <div class="head"><div><h1>Bonjour, ${esc(me.name)}</h1><p>Vue d'ensemble des archives administratives.</p></div>
-      <button class="btn-primary" onclick="docForm()">+ Nouveau document</button></div>
+    <div class="head"><div><span class="section-label">ADMINISTRATION</span><h1>Bonjour, ${esc(me.name)}</h1><p>Statistiques calculées à partir des fichiers réellement présents dans Dropbox.</p></div>
+      <button class="btn-primary" onclick="refreshDropboxDashboard()">Actualiser les données</button></div>
+    <div class="dash-source"><span class="status-dot"></span><b>Dropbox connecté</b><span>· Dossier : ${esc(data.folder)}</span><span>· Actualisé : ${esc(lastSync)}</span></div>
     <div class="kpis">${kpis}</div>
     <div class="grid2">
-      <div class="card"><h3>Répartition par type</h3>${hbars(TYPES.map(t => [t, docs.filter(d => d.type === t).length]))}</div>
-      <div class="card"><h3>Répartition par année</h3>${hbars(Object.entries(years).sort().reverse())}</div>
+      <div class="card"><h3>Répartition par type de document</h3>${dashBars(byType)}</div>
+      <div class="card"><h3>Répartition par année de modification</h3>${dashBars(byYear)}</div>
     </div>
-    <div class="card"><h3>Documents par mois en ${y}</h3>
-      <div class="cols">${byM.map((n, i) => `<div><b>${n || ""}</b><i style="height:${n / maxM * 100}px"></i>${MONTHS[i].slice(0, 3)}</div>`).join("")}</div></div>
-    <div class="card"><h3>Derniers documents</h3>${docTable(recent, false)}</div>
-    <div class="card"><h3>Dernières activités</h3>${logTable(logs.slice(0, 6))}</div>`;
+    <div class="card"><h3>Fichiers modifiés par mois en ${esc(year)}</h3><div class="cols">${monthRows.map(([m,n]) => `<div><b>${n || ""}</b><i style="height:${n ? Math.max(3, n / Math.max(1,...monthRows.map(x=>x[1])) * 100) : 2}px"></i>${m}</div>`).join("")}</div></div>
+    <div class="grid2">
+      <div class="card"><h3>Formats de fichiers</h3>${dashBars(extRows)}</div>
+      <div class="card"><h3>Contrôles automatiques</h3><ul class="dash-tips"><li>${Number((data.byType || {}).Autre || 0)} fichier(s) dont le type est à vérifier (« Autre »).</li><li>${Number(data.noExtension || 0)} fichier(s) sans extension.</li><li>${Number(data.duplicateNameGroups || 0)} nom(s) de fichier présent(s) à plusieurs emplacements, à vérifier.</li></ul><p class="muted">Les noms identiques ne prouvent pas que le contenu est identique. Les dates affichées sont celles de modification Dropbox.</p></div>
+    </div>
+    <div class="card"><h3>Derniers fichiers modifiés dans Dropbox</h3>${docTable(recent)}</div>
+    <div class="card"><h3>Dernières activités tracées dans Dropbox</h3>${logTable(logs.slice(0, 6))}</div>`;
 }
-
+async function refreshDropboxDashboard() {
+  const requestId = ++dashboardRequest;
+  logs = []; // le tableau de bord ne montre jamais le cache local comme journal officiel
+  $("#main").innerHTML = `<div class="head"><div><h1>Tableau de bord</h1><p>Lecture des métadonnées réelles de Dropbox…</p></div></div><div class="card"><div class="loading-line"></div><p class="muted">Connexion au dossier ARCHIVA en cours.</p></div>`;
+  try {
+    const response = await fetch("/api/dropbox-search?action=stats", { headers: { "Accept": "application/json" }, cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erreur API (${response.status}).`);
+    if (requestId !== dashboardRequest || view !== "dash") return;
+    const auditResponse = await fetch("/api/dropbox-search?action=logs", { headers: { "Accept": "application/json" }, cache: "no-store" });
+    if (auditResponse.ok) { const auditPayload = await auditResponse.json(); logs = auditPayload.logs || []; }
+    renderDropboxDashboard(payload);
+  } catch (error) {
+    if (requestId !== dashboardRequest || view !== "dash") return;
+    $("#main").innerHTML = `<div class="head"><div><h1>Tableau de bord</h1><p>Impossible de récupérer les statistiques Dropbox.</p></div><button class="btn-primary" onclick="refreshDropboxDashboard()">Réessayer</button></div>
+      <div class="card"><span class="badge off">Dropbox indisponible</span><h3>Erreur de connexion</h3><p>${esc(error.message)}</p><p class="muted">Les statistiques ne sont pas remplacées par des chiffres fictifs. Vérifiez la configuration Dropbox et les journaux Vercel.</p></div>
+      <div class="card"><h3>Comptes ARCHIVA</h3><p>${users.filter(u => u.active).length} compte(s) actif(s) sur ${users.length}.</p></div>
+      <div class="card"><h3>Dernières activités tracées dans Dropbox</h3>${logTable(logs.slice(0, 6))}</div>`;
+  }
+}
+function viewDash() { refreshDropboxDashboard(); }
 
 /* ----- 7.3 Documents ----- */
 
-// Construit le tableau des documents.
-// actions = true  -> colonnes Modifier / Supprimer (super utilisateur)
-// actions = false -> simple consultation (consultant, tableau de bord)
-// Dans tous les cas : boutons « Lire » et « Télécharger » si un fichier existe.
-function docTable(list, actions) {
-  if (!list.length) return `<div class="empty">Aucun document trouvé.</div>`;
-  return `<div class="table-container"><table><thead><tr><th>N°</th><th>Référence</th><th>Type</th><th>Date</th><th>Document</th><th>Taille</th><th>Fichier</th>${actions ? "<th>Actions</th>" : ""}</tr></thead><tbody>` +
-    list.map((d, i) => `<tr><td>${i + 1}</td><td>${esc(d.ref)}</td><td><span class="badge">${esc(d.type)}</span></td><td>${fdate(d.date + "T00:00:00")}</td><td>${esc(d.name)}</td><td>${d.size ? (d.size / 1024).toFixed(1) + " Ko" : "—"}</td>
-      <td>${d.file
-        ? (d.file.source === "dropbox"
-          ? `<button class="btn-secondary btn-sm" onclick="openDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Lire</button><button class="btn-primary btn-sm" onclick="downloadDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Télécharger</button>`
-          : `<button class="btn-secondary btn-sm" onclick="openDoc('${esc(d.ref)}')">Lire</button><button class="btn-primary btn-sm" onclick="dlDoc('${esc(d.ref)}')">Télécharger</button>`)
-        : `<span class="muted">Aucun fichier</span>`}</td>` +
-      (actions ? `<td><button class="btn-secondary btn-sm" onclick="docForm('${esc(d.ref)}')">Modifier</button><button class="btn-danger btn-sm" onclick="docDel('${esc(d.ref)}')">Supprimer</button></td>` : "") +
-      `</tr>`).join("") + `</tbody></table></div>`;
-}
-
-// Retrouve le fichier joint d'un document et le transforme en vrai fichier
-async function fileBlob(ref) {
-  const d = docs.find(x => x.ref === ref);
-  return d && d.file ? { d, blob: await (await fetch(d.file.data)).blob() } : null;
-}
-// « Lire » : ouvre le fichier dans un nouvel onglet
-async function openDoc(ref) {
-  const f = await fileBlob(ref); if (!f) return;
-  window.open(URL.createObjectURL(f.blob), "_blank");
-  log("Lecture : " + ref);
-}
-// « Télécharger » : enregistre le fichier sur l'ordinateur
-async function dlDoc(ref) {
-  const f = await fileBlob(ref); if (!f) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(f.blob); a.download = f.d.file.name; a.click();
-  log("Téléchargement : " + ref);
+// Tableau construit exclusivement à partir des métadonnées Dropbox.
+function docTable(list) {
+  if (!list.length) return `<div class="empty">Aucun fichier correspondant dans Dropbox.</div>`;
+  return `<div class="table-container"><table><thead><tr><th>N°</th><th>Chemin Dropbox</th><th>Type estimé</th><th>Modifié le</th><th>Nom du fichier</th><th>Taille</th><th>Actions</th></tr></thead><tbody>` +
+    list.map((d, i) => `<tr><td>${i + 1}</td><td>${esc(d.path || d.ref)}</td><td><span class="badge">${esc(d.type || "Autre")}</span></td><td>${d.date ? fdate(d.date + "T00:00:00") : "Date indisponible"}</td><td>${esc(d.name)}</td><td>${d.size ? (d.size / 1024).toFixed(1) + " Ko" : "—"}</td>
+      <td><button class="btn-secondary btn-sm" onclick="openDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Lire</button> <button class="btn-primary btn-sm" onclick="downloadDropboxDoc('${encodeURIComponent(d.path).replace(/'/g, '%27')}')">Télécharger</button></td></tr>`).join("") + `</tbody></table></div>`;
 }
 
 // Les liens Dropbox sont créés côté serveur et restent temporaires.
@@ -399,111 +403,73 @@ async function dropboxTemporaryLink(encodedPath) {
   return payload.url;
 }
 async function openDropboxDoc(encodedPath) {
-  try { const url = await dropboxTemporaryLink(encodedPath); window.open(url, "_blank", "noopener"); }
+  try { const path = decodeURIComponent(encodedPath); const url = await dropboxTemporaryLink(encodedPath); window.open(url, "_blank", "noopener"); log("Consultation d'un document", me?.username, path); }
   catch (error) { alert(error.message); }
 }
 async function downloadDropboxDoc(encodedPath) {
   try {
+    const path = decodeURIComponent(encodedPath);
     const url = await dropboxTemporaryLink(encodedPath);
     const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click();
+    log("Téléchargement d'un document", me?.username, path);
   } catch (error) { alert(error.message); }
 }
 
-// Applique les filtres de la page Documents (texte, type, année, mois)
+// Catalogue réel Dropbox uniquement. Les filtres s'appliquent aux métadonnées reçues de Dropbox.
+let dropboxDocs = [];
 function filtered() {
   const q = flt.q.toLowerCase();
-  return docs.filter(d =>
-    (!q || (d.ref + d.name + d.type).toLowerCase().includes(q)) &&
+  return dropboxDocs.filter(d =>
+    (!q || (d.name + " " + d.path + " " + d.type).toLowerCase().includes(q)) &&
     (!flt.type || d.type === flt.type) &&
-    (!flt.year || d.date.startsWith(flt.year)) &&
-    (!flt.month || d.date.slice(5, 7) === flt.month)
-  ).sort((a, b) => b.date.localeCompare(a.date));
+    (!flt.year || (d.date || "").startsWith(flt.year)) &&
+    (!flt.month || (d.date || "").slice(5, 7) === flt.month)
+  ).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
-// La page « Documents » du super utilisateur
-function viewDocs() {
-  const yrs = [...new Set(docs.map(d => d.date.slice(0, 4)))].sort().reverse();
-  // Petite fabrique de listes déroulantes pour les filtres
-  const sel = (id, ph, opts, val) => `<select id="${id}"><option value="">${ph}</option>${opts.map(o => `<option value="${o[0]}" ${o[0] === val ? "selected" : ""}>${o[1]}</option>`).join("")}</select>`;
-
-  $("#main").innerHTML = `
-    <div class="head"><div><h1>Documents archivés</h1><p>Rechercher, consulter et gérer les archives.</p></div>
-      <div><button class="btn-secondary" onclick="exportCsv()">Exporter CSV</button> <button class="btn-primary" onclick="docForm()">+ Nouveau document</button></div></div>
-    <div class="card"><div class="tools">
-      <input id="fq" placeholder="Rechercher (référence, nom…)" value="${esc(flt.q)}">
-      ${sel("ft", "Tous les types", TYPES.map(t => [t, t]), flt.type)}
-      ${sel("fy", "Toutes les années", yrs.map(y => [y, y]), flt.year)}
-      ${sel("fm", "Tous les mois", MONTHS.map((m, i) => [String(i + 1).padStart(2, "0"), m]), flt.month)}
-    </div><p class="muted" id="cnt" style="margin-bottom:12px"></p><div id="tbl"></div></div>`;
-
-  // Redessine uniquement le tableau à chaque frappe (le champ garde le focus)
-  const draw = () => { const l = filtered(); $("#cnt").textContent = l.length + " résultat(s)"; $("#tbl").innerHTML = docTable(l, true); };
-  [["fq", "q"], ["ft", "type"], ["fy", "year"], ["fm", "month"]].forEach(([id, k]) =>
-    $("#" + id).addEventListener("input", e => { flt[k] = e.target.value; draw(); }));
-  draw();
-}
-
-// Fabrique la prochaine référence : DGSS/SG/ANNÉE/NNN (numéro qui continue)
-function nextRef(date) {
-  const n = Math.max(0, ...docs.map(d => parseInt(d.ref.split("/").pop(), 10) || 0)) + 1;
-  return `DGSS/SG/${date.slice(0, 4)}/${String(n).padStart(3, "0")}`;
-}
-
-// Ouvre la fenêtre de saisie. onSave est appelé quand on clique « Enregistrer ».
-// Si onSave renvoie false, la fenêtre reste ouverte (erreur à corriger).
-function modal(title, body, onSave) {
-  const f = $("#dform");
-  f.innerHTML = `<h3>${title}</h3>${body}<div class="buttons"><button type="button" class="btn-secondary" onclick="$('#dlg').close()">Annuler</button><button class="btn-primary">Enregistrer</button></div>`;
-  f.onsubmit = e => {
-    e.preventDefault();
-    if (onSave(Object.fromEntries(new FormData(f))) !== false) $("#dlg").close();
-  };
-  $("#dlg").showModal();
-}
-
-// Formulaire d'ajout (sans ref) ou de modification (avec ref) d'un document
-function docForm(ref) {
-  if (!can("doc")) return;   // sécurité : réservé au super utilisateur
-  const d = docs.find(x => x.ref === ref) || { type: "Note", date: new Date().toISOString().slice(0, 10), name: "", file: null };
-
-  modal(ref ? "Modifier le document" : "Nouveau document", `
-    <label>Type</label><select name="type">${TYPES.map(t => `<option ${t === d.type ? "selected" : ""}>${t}</option>`).join("")}</select>
-    <label>Date</label><input type="date" name="date" value="${d.date}" required>
-    <label>Intitulé du document</label><input name="name" value="${esc(d.name)}" required>
-    <label>Fichier (PDF, image, Word… 2 Mo max)${d.file ? " — actuel : " + esc(d.file.name) : ""}</label><input type="file" name="file">`,
-    v => {
-      const f = v.file; delete v.file;
-      if (f && f.size > 2 * 1024 * 1024) { alert("Fichier trop volumineux (2 Mo maximum)."); return false; }
-
-      // Enregistre le document (appelé une fois le fichier éventuel lu)
-      const done = file => {
-        if (file) d.file = file;
-        if (ref) { Object.assign(d, v); log("Document modifié : " + ref); }
-        else { const nd = { ref: nextRef(v.date), ...v, by: me.username, file: d.file }; docs.push(nd); log("Document ajouté : " + nd.ref); }
-        persist(); toast("Document enregistré."); render();
-      };
-      // S'il y a un fichier, on le convertit en texte pour pouvoir le garder
-      if (f && f.size) { const r = new FileReader(); r.onload = () => done({ name: f.name, data: r.result }); r.readAsDataURL(f); }
-      else done(null);
-    });
-}
-
-// Supprime un document après confirmation
-function docDel(ref) {
-  if (!can("doc") || !confirm("Supprimer le document " + ref + " ?")) return;
-  docs = docs.filter(d => d.ref !== ref);
-  log("Document supprimé : " + ref); persist(); render();
+async function viewDocs() {
+  const requestView = view;
+  flt = { q: "", type: "", year: "", month: "" };
+  $("#main").innerHTML = `<div class="head"><div><h1>Documents archivés</h1><p>Catalogue synchronisé avec le dossier Dropbox ARCHIVA. Aucun document local ou fictif n'est affiché.</p></div></div><div class="card"><div class="loading-line"></div><p class="muted">Chargement des fichiers réels depuis Dropbox…</p></div>`;
+  try {
+    const response = await fetch("/api/dropbox-search?action=files", { headers: { "Accept": "application/json" }, cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erreur Dropbox (${response.status}).`);
+    if (view !== requestView) return;
+    dropboxDocs = (payload.files || []).map(file => ({
+      ref: file.path, type: file.type || "Autre", date: file.date || "", name: file.name, size: file.size || 0, path: file.path,
+      file: { source: "dropbox", name: file.name, path: file.path }
+    }));
+    const yrs = [...new Set(dropboxDocs.map(d => d.date.slice(0, 4)).filter(Boolean))].sort().reverse();
+    const sel = (id, ph, opts) => `<select id="${id}"><option value="">${ph}</option>${opts.map(o => `<option value="${o[0]}">${o[1]}</option>`).join("")}</select>`;
+    $("#main").innerHTML = `
+      <div class="head"><div><h1>Documents archivés</h1><p>${dropboxDocs.length.toLocaleString("fr-FR")} fichier(s) réel(s) dans Dropbox.</p></div>
+        <button class="btn-secondary" onclick="exportCsv(filtered())">Exporter CSV</button></div>
+      <div class="card"><div class="tools">
+        <input id="fq" placeholder="Rechercher par nom ou chemin…">
+        ${sel("ft", "Tous les types", TYPES.map(t => [t, t]))}
+        ${sel("fy", "Toutes les années", yrs.map(y => [y, y]))}
+        ${sel("fm", "Tous les mois", MONTHS.map((m, i) => [String(i + 1).padStart(2, "0"), m]))}
+      </div><p class="muted" id="cnt" style="margin-bottom:12px"></p><div id="tbl"></div></div>`;
+    const draw = () => { const list = filtered(); $("#cnt").textContent = `${list.length} fichier(s) trouvé(s) dans Dropbox`; $("#tbl").innerHTML = docTable(list); };
+    [["fq", "q"], ["ft", "type"], ["fy", "year"], ["fm", "month"]].forEach(([id, key]) => $("#" + id).addEventListener("input", e => { flt[key] = e.target.value; draw(); }));
+    draw();
+    log("Consultation du catalogue Dropbox", me?.username, payload.folder, `${dropboxDocs.length} fichiers listés`);
+  } catch (error) {
+    if (view !== requestView) return;
+    $("#main").innerHTML = `<div class="head"><div><h1>Documents archivés</h1><p>Le catalogue n'est pas disponible.</p></div><button class="btn-primary" onclick="viewDocs()">Réessayer</button></div><div class="card"><span class="badge off">Dropbox indisponible</span><p>${esc(error.message)}</p><p class="muted">Aucun document fictif n'est affiché en remplacement.</p></div>`;
+  }
 }
 
 // Exporte une liste de documents en CSV (lisible dans Excel).
 // Sans argument : exporte la liste filtrée de la page Documents.
 function exportCsv(list) {
   list = list || filtered();
-  const rows = [["Référence", "Type", "Date", "Document"], ...list.map(d => [d.ref, d.type, d.date, d.name])];
+  const rows = [["Chemin Dropbox", "Type estimé", "Date de modification Dropbox", "Nom du fichier", "Taille en octets"], ...list.map(d => [d.path || d.ref, d.type, d.date, d.name, d.size || 0])];
   const csv = "\ufeff" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  a.download = "archives.csv"; a.click();
+  a.download = "archiva-fichiers-dropbox.csv"; a.click();
   log("Export CSV");
 }
 
@@ -563,22 +529,29 @@ function userDel(name) {
 }
 
 
-/* ----- 7.5 Journal d'activité ----- */
-
-// Tableau « date / utilisateur / action »
+/* ----- 7.5 Journal d'activité persistant dans Dropbox ----- */
 function logTable(list) {
-  if (!list.length) return `<div class="empty">Aucune activité enregistrée.</div>`;
-  return `<div class="table-container"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th></tr></thead><tbody>` +
-    list.map(l => `<tr><td>${fdt(l.d)}</td><td>${esc(l.u)}</td><td>${esc(l.a)}</td></tr>`).join("") + `</tbody></table></div>`;
+  if (!list.length) return `<div class="empty">Aucune activité enregistrée dans le journal Dropbox.</div>`;
+  return `<div class="table-container"><table><thead><tr><th>Date et heure</th><th>Utilisateur déclaré</th><th>Rôle</th><th>Action</th><th>Cible</th><th>Détails</th></tr></thead><tbody>` +
+    list.map(l => `<tr><td>${fdt(l.d)}</td><td>${esc(l.u)}</td><td>${esc(l.role || "—")}</td><td>${esc(l.a)}</td><td>${esc(l.target || "—")}</td><td>${esc(l.details || "—")}</td></tr>`).join("") + `</tbody></table></div>`;
 }
-function viewLogs() {
-  $("#main").innerHTML = `<div class="head"><div><h1>Journal d'activité</h1><p>Traçabilité des connexions, recherches et actions.</p></div>
-    <button class="btn-danger" onclick="clearLogs()">Vider le journal</button></div>
-    <div class="card">${logTable(logs)}</div>`;
+async function viewLogs() {
+  $("#main").innerHTML = `<div class="head"><div><h1>Journal de traçabilité</h1><p>Événements enregistrés sous forme de fichiers JSON dans Dropbox. Les entrées ne peuvent pas être effacées depuis ARCHIVA.</p></div><button class="btn-primary" onclick="viewLogs()">Actualiser</button></div><div class="card"><div class="loading-line"></div><p class="muted">Lecture du journal d’activité dans Dropbox…</p></div>`;
+  try {
+    const response = await fetch("/api/dropbox-search?action=logs", { headers: { "Accept": "application/json" }, cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erreur API (${response.status}).`);
+    logs = payload.logs || [];
+    $("#main").innerHTML = `<div class="head"><div><h1>Journal de traçabilité</h1><p>${logs.length} événement(s) récent(s), conservés dans Dropbox.</p></div><div><button class="btn-secondary" onclick="exportLogsCsv()">Exporter le journal CSV</button> <button class="btn-primary" onclick="viewLogs()">Actualiser</button></div></div><div class="card"><p class="muted">Dossier : ${esc(payload.auditFolder || "Journal Dropbox")} · Journal non effaçable depuis l'interface.</p>${logTable(logs)}</div>`;
+  } catch (error) {
+    $("#main").innerHTML = `<div class="head"><div><h1>Journal de traçabilité</h1><p>Impossible de lire le journal Dropbox.</p></div><button class="btn-primary" onclick="viewLogs()">Réessayer</button></div><div class="card"><span class="badge off">Journal indisponible</span><p>${esc(error.message)}</p><p class="muted">Le journal local n'est pas présenté comme une preuve de traçabilité.</p></div>`;
+  }
 }
-function clearLogs() {
-  if (!confirm("Vider tout le journal d'activité ?")) return;
-  logs = []; log("Journal vidé"); render();
+function exportLogsCsv() {
+  const rows = [["Date UTC", "Utilisateur déclaré", "Rôle déclaré", "Action", "Cible", "Détails", "Session", "Identifiant événement"], ...logs.map(l => [l.d, l.u, l.role, l.a, l.target, l.details, l.sessionId, l.id])];
+  const csv = "\ufeff" + rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "archiva-journal-tracabilite.csv"; a.click();
+  log("Export du journal de traçabilité", me?.username, "Journal Dropbox");
 }
 
 
